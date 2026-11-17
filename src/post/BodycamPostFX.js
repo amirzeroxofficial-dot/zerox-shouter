@@ -9,12 +9,14 @@ const BodycamShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uDistortion: { value: 0.14 },
+    uDistortion: { value: 0.095 },
     uChromatic: { value: 0.0018 },
     uGrain: { value: 0.014 },
     uShock: { value: 0.0 },
     uExposureBoost: { value: 1.0 },
-    uAspect: { value: 1.777 }
+    uAspect: { value: 1.777 },
+    uSharpen: { value: 0.26 },
+    uTexelSize: { value: new THREE.Vector2(1 / 1280, 1 / 720) }
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -32,24 +34,26 @@ const BodycamShader = {
     uniform float uShock;
     uniform float uExposureBoost;
     uniform float uAspect;
+    uniform float uSharpen;
+    uniform vec2 uTexelSize;
     varying vec2 vUv;
 
     float rand(vec2 co) {
       return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
     }
 
-    vec2 barrelDistort(vec2 uv, float k) {
-      vec2 centered = (uv - 0.5) * 0.91;
-      centered.x *= uAspect;
-      float r2 = dot(centered, centered);
-      float factor = 1.0 + k * r2 + (k * 0.45) * r2 * r2;
-      vec2 distorted = centered * factor;
-      distorted.x /= uAspect;
-      return distorted + 0.5;
+    vec2 barrelDistort(vec2 uv, float k, float aspect) {
+      vec2 d = uv - 0.5;
+      float maxR2 = 0.25 * (aspect * aspect + 1.0);
+      vec2 phys = vec2(d.x * aspect, d.y);
+      float r2 = dot(phys, phys) / maxR2;
+      float preZoom = 1.0 / (1.0 + k * 1.15);
+      float factor = preZoom * (1.0 + k * r2 + (k * 0.35) * r2 * r2);
+      return d * factor + 0.5;
     }
 
     void main() {
-      vec2 dUv = barrelDistort(vUv, uDistortion);
+      vec2 dUv = barrelDistort(vUv, uDistortion, uAspect);
 
       // Subtle wide-angle bodycam rounded bezel corners
       if (dUv.x < 0.0 || dUv.x > 1.0 || dUv.y < 0.0 || dUv.y > 1.0) {
@@ -75,7 +79,19 @@ const BodycamShader = {
       float g = texture2D(tDiffuse, clamp(sampleUv, 0.001, 0.999)).g;
       float b = texture2D(tDiffuse, clamp(sampleUv - dir * caAmt, 0.001, 0.999)).b;
 
-      vec3 col = vec3(r, g, b) * uExposureBoost;
+      vec3 col = vec3(r, g, b);
+
+      // Subtle luma-safe CAS-style sharpening for razor-crisp mobile/desktop textures
+      if (uSharpen > 0.01 && uShock < 0.12) {
+        vec3 n1 = texture2D(tDiffuse, clamp(sampleUv + vec2(uTexelSize.x, 0.0), 0.001, 0.999)).rgb;
+        vec3 n2 = texture2D(tDiffuse, clamp(sampleUv - vec2(uTexelSize.x, 0.0), 0.001, 0.999)).rgb;
+        vec3 n3 = texture2D(tDiffuse, clamp(sampleUv + vec2(0.0, uTexelSize.y), 0.001, 0.999)).rgb;
+        vec3 n4 = texture2D(tDiffuse, clamp(sampleUv - vec2(0.0, uTexelSize.y), 0.001, 0.999)).rgb;
+        vec3 blurAvg = (n1 + n2 + n3 + n4) * 0.25;
+        col = max(vec3(0.0), col + (col - blurAvg) * uSharpen);
+      }
+
+      col *= uExposureBoost;
 
       // Subtle radial shock blur when suppressed or damaged
       if (uShock > 0.02) {
@@ -97,8 +113,8 @@ const BodycamShader = {
       col *= (1.0 - scan);
 
       // Optical lens edge falloff
-      float vig = smoothstep(0.95, 0.36, dist * (1.0 + uDistortion * 0.4));
-      col *= mix(0.66, 1.0, vig);
+      float vig = smoothstep(0.96, 0.36, dist * (1.0 + uDistortion * 0.35));
+      col *= mix(0.68, 1.0, vig);
 
       // Crisp tactical bodycam color grade
       col = pow(max(col, vec3(0.0)), vec3(0.96));
@@ -115,18 +131,28 @@ export class BodycamPostFX {
     this.scene = scene;
     this.camera = camera;
 
-    this.composer = new EffectComposer(renderer);
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    const pr = renderer.getPixelRatio();
+
+    // WebGL2 MSAA HalfFloat render target for ultra-crisp anti-aliased edges on mobile & desktop
+    const rt = new THREE.WebGLRenderTarget(w, h, {
+      type: THREE.HalfFloatType,
+      samples: renderer.capabilities.isWebGL2 ? 4 : 0
+    });
+
+    this.composer = new EffectComposer(renderer, rt);
+    this.composer.setSize(w, h);
+
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
 
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.42, 0.84);
     this.composer.addPass(this.bloomPass);
 
     this.bodycamPass = new ShaderPass(BodycamShader);
-    this.bodycamPass.uniforms.uAspect.value = w / Math.max(1, h);
+    this.bodycamPass.uniforms.uAspect.value = w / h;
+    this.bodycamPass.uniforms.uTexelSize.value.set(1 / Math.max(1, w * pr), 1 / Math.max(1, h * pr));
     this.composer.addPass(this.bodycamPass);
 
     this.outputPass = new OutputPass();
@@ -141,9 +167,9 @@ export class BodycamPostFX {
 
   setProfile(profile) {
     if (profile === 'extreme') {
-      this.baseDistortion = 0.16;
-      this.baseChromatic = 0.003;
-      this.bodycamPass.uniforms.uGrain.value = 0.022;
+      this.baseDistortion = 0.145;
+      this.baseChromatic = 0.0028;
+      this.bodycamPass.uniforms.uGrain.value = 0.02;
     } else if (profile === 'tactical') {
       this.baseDistortion = 0.05;
       this.baseChromatic = 0.0011;
@@ -151,7 +177,7 @@ export class BodycamPostFX {
     } else {
       this.baseDistortion = 0.095;
       this.baseChromatic = 0.0018;
-      this.bodycamPass.uniforms.uGrain.value = 0.015;
+      this.bodycamPass.uniforms.uGrain.value = 0.014;
     }
     this.bodycamPass.uniforms.uDistortion.value = this.baseDistortion;
     this.bodycamPass.uniforms.uChromatic.value = this.baseChromatic;
@@ -160,14 +186,17 @@ export class BodycamPostFX {
   setQuality(quality) {
     if (quality === 'perf') {
       this.bloomPass.enabled = false;
+      this.bodycamPass.uniforms.uSharpen.value = 0.0;
       this.enabled = false;
     } else if (quality === 'high') {
       this.bloomPass.enabled = true;
       this.bloomPass.strength = 0.26;
+      this.bodycamPass.uniforms.uSharpen.value = 0.22;
       this.enabled = true;
     } else {
       this.bloomPass.enabled = true;
-      this.bloomPass.strength = 0.38;
+      this.bloomPass.strength = 0.36;
+      this.bodycamPass.uniforms.uSharpen.value = 0.28;
       this.enabled = true;
     }
   }
@@ -177,9 +206,14 @@ export class BodycamPostFX {
   }
 
   resize(width, height) {
-    this.composer.setSize(width, height);
-    this.bloomPass.setSize(width, height);
-    this.bodycamPass.uniforms.uAspect.value = width / Math.max(1, height);
+    const w = Math.max(1, width);
+    const h = Math.max(1, height);
+    const pr = this.renderer.getPixelRatio();
+    this.composer.setPixelRatio(pr);
+    this.composer.setSize(w, h);
+    this.bloomPass.setSize(w, h);
+    this.bodycamPass.uniforms.uAspect.value = w / h;
+    this.bodycamPass.uniforms.uTexelSize.value.set(1 / Math.max(1, w * pr), 1 / Math.max(1, h * pr));
   }
 
   update(dt, timeSec, recoilKick = 0, exposureBoost = 1.0) {

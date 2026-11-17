@@ -741,6 +741,7 @@ export class WeaponSystem {
 
     this.shotsFired++;
     this.fireTimer = 60 / w.rpm;
+    this.onShotFired?.(this.activeId);
 
     // Empty bolt lock check!
     if (w.mag === 0 && !w.chambered) {
@@ -908,8 +909,11 @@ export class WeaponSystem {
     this.cantLerp = THREE.MathUtils.lerp(this.cantLerp, cantTarget, Math.min(1, dt * 13));
     this.sprintLerp = THREE.MathUtils.lerp(this.sprintLerp, controller.sprinting ? 1 : 0, Math.min(1, dt * 9));
 
-    // Smooth bodycam FOV shift during ADS
-    const targetFov = THREE.MathUtils.lerp(w.hipFov, w.adsFov, this.adsLerp * (1 - this.cantLerp * 0.45));
+    // Smooth bodycam FOV shift during ADS (plus gentle vertical compensation on portrait phones)
+    const isPortrait = this.camera.aspect < 1.0;
+    const portraitFovBoost = isPortrait ? Math.min(18, (1.0 - this.camera.aspect) * 32) : 0;
+    const targetFov =
+      THREE.MathUtils.lerp(w.hipFov, w.adsFov, this.adsLerp * (1 - this.cantLerp * 0.45)) + portraitFovBoost;
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, Math.min(1, dt * 12));
       this.camera.updateProjectionMatrix();
@@ -941,7 +945,9 @@ export class WeaponSystem {
 
     // Base Pose (Hip vs Holographic ADS vs Canted Laser vs Low-Ready Sprint)
     const isRifle = this.activeId === 'rifle';
-    const hipPos = isRifle ? new THREE.Vector3(0.145, -0.155, -0.26) : new THREE.Vector3(0.115, -0.115, -0.22);
+    const hipPos = isRifle
+      ? new THREE.Vector3(isPortrait ? 0.112 : 0.145, -0.155, -0.26)
+      : new THREE.Vector3(isPortrait ? 0.092 : 0.115, -0.115, -0.22);
     const adsPos = isRifle ? new THREE.Vector3(0.0, -0.095, -0.185) : new THREE.Vector3(0.0, -0.059, -0.22);
     const cantPos = isRifle ? new THREE.Vector3(0.045, -0.105, -0.22) : new THREE.Vector3(0.032, -0.062, -0.20);
 

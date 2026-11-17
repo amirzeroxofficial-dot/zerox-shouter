@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#090b0e" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>ZEROX // BODYCAM — Tactical First-Person Shooter</title>
   <meta name="description" content="WebGL photorealistic bodycam tactical first-person shooter with procedural WebAudio acoustics, multi-stage weapon reloads, dynamic lighting, and tactical AI breaching." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -45,21 +49,34 @@
           </div>
         </div>
 
-        <div class="osd-block osd-mission">
-          <div class="mission-row osd-mono">
-            <span class="tag-dim">SECTOR 07 // WAREHOUSE</span>
-            <span class="sep">|</span>
-            <span>WAVE <strong id="hud-wave">01</strong></span>
-            <span class="sep">|</span>
-            <span>HOSTILES <strong id="hud-enemies" class="accent-amber">00</strong></span>
-            <span class="sep">|</span>
-            <span>ELIMS <strong id="hud-kills">00</strong></span>
+        <div class="osd-top-right">
+          <!-- Always-accessible quick Fullscreen & Pause pills -->
+          <div class="hud-quick-actions osd-mono">
+            <button id="hud-btn-fullscreen" class="hud-pill-btn" type="button" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">
+              <svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="fs-label">FULL</span>
+            </button>
+            <button id="hud-btn-pause" class="hud-pill-btn" type="button" title="Pause / Settings" aria-label="Pause Game">
+              II MENU
+            </button>
           </div>
-          <div id="comms-feed" class="comms-feed osd-mono"></div>
+
+          <div class="osd-block osd-mission">
+            <div class="mission-row osd-mono">
+              <span class="tag-dim">SECTOR 07 // WAREHOUSE</span>
+              <span class="sep tag-dim">|</span>
+              <span>WAVE <strong id="hud-wave">01</strong></span>
+              <span class="sep">|</span>
+              <span>HOSTILES <strong id="hud-enemies" class="accent-amber">00</strong></span>
+              <span class="sep">|</span>
+              <span>ELIMS <strong id="hud-kills">00</strong></span>
+            </div>
+            <div id="comms-feed" class="comms-feed osd-mono"></div>
+          </div>
         </div>
       </div>
 
-      <div id="reload-prompt" class="reload-prompt osd-mono hidden">LOW / EMPTY MAG — PRESS [R]</div>
+      <div id="reload-prompt" class="reload-prompt osd-mono hidden">LOW / EMPTY MAG — RELOAD</div>
 
       <div class="osd-bottom-row">
         <div class="osd-block osd-vitals">
@@ -72,9 +89,9 @@
             <div id="hud-hp-fill" class="hp-fill" style="width: 100%"></div>
           </div>
           <div class="vitals-sub osd-mono">
-            <span>ARMOR PLATE <strong id="hud-armor">100%</strong></span>
+            <span>ARMOR <strong id="hud-armor">100%</strong></span>
             <span class="sep">|</span>
-            <span>HEALTH <strong id="hud-hp">100%</strong></span>
+            <span>HP <strong id="hud-hp">100%</strong></span>
           </div>
         </div>
 
@@ -93,23 +110,83 @@
           <div class="weapon-toggles osd-mono">
             <span id="hud-light-ind" class="toggle-ind active">[F] LIGHT ON</span>
             <span id="hud-laser-ind" class="toggle-ind active">[X] PEQ-15</span>
-            <span class="toggle-ind">[G] INSPECT</span>
+            <span class="toggle-ind desktop-only">[G] INSPECT</span>
           </div>
         </div>
       </div>
     </header>
+
+    <!-- Rotate-to-Landscape Mobile Advisory Banner -->
+    <div id="rotate-banner" class="rotate-banner osd-mono hidden">
+      <span>ROTATE TO LANDSCAPE</span>
+      <button id="btn-rotate-full" class="rotate-banner-btn" type="button">
+        <svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>FULLSCREEN</span>
+      </button>
+      <button id="btn-rotate-dismiss" class="rotate-banner-close" type="button" aria-label="Dismiss">✕</button>
+    </div>
+
+    <!-- Mobile Dual-Stick & Tactical Touch Controls -->
+    <div id="mobile-controls" class="mobile-controls hidden" aria-label="Touch Controls">
+      <!-- Left Analog Move + Sprint Pad -->
+      <div id="touch-move-zone" class="touch-move-zone">
+        <div id="touch-stick-base" class="touch-stick-base">
+          <div id="touch-stick-sprint-arc" class="touch-stick-sprint-arc">SPRINT</div>
+          <div id="touch-stick-knob" class="touch-stick-knob"></div>
+        </div>
+      </div>
+
+      <!-- Right Camera Look Swipe Zone -->
+      <div id="touch-look-zone" class="touch-look-zone"></div>
+
+      <!-- Left Quick Fire & Lean/Crouch Strip -->
+      <div class="touch-left-actions osd-mono">
+        <button id="tbtn-fire-left" class="tbtn tbtn-fire-sm" type="button">FIRE</button>
+        <div class="tbtn-pair">
+          <button id="tbtn-lean-l" class="tbtn tbtn-sm" type="button">&lt; Q</button>
+          <button id="tbtn-lean-r" class="tbtn tbtn-sm" type="button">E &gt;</button>
+        </div>
+      </div>
+
+      <!-- Upper Right Utility Strip (Weapon Swap / Mode / Light / Inspect) -->
+      <div class="touch-top-utility osd-mono">
+        <button id="tbtn-swap" class="tbtn tbtn-pill" type="button">SWAP G19</button>
+        <button id="tbtn-firemode" class="tbtn tbtn-pill" type="button">AUTO</button>
+        <button id="tbtn-light" class="tbtn tbtn-pill active" type="button">LIGHT</button>
+        <button id="tbtn-inspect" class="tbtn tbtn-pill" type="button">INSP</button>
+      </div>
+
+      <!-- Right Ergonomic Thumb Combat Cluster -->
+      <div class="touch-right-actions osd-mono">
+        <button id="tbtn-crouch" class="tbtn tbtn-circle" type="button">CROUCH</button>
+        <button id="tbtn-jump" class="tbtn tbtn-circle" type="button">JUMP</button>
+        <button id="tbtn-cant" class="tbtn tbtn-circle" type="button">CANT</button>
+        <button id="tbtn-reload" class="tbtn tbtn-circle" type="button">RLD</button>
+        <button id="tbtn-ads" class="tbtn tbtn-ads" type="button">ADS</button>
+        <button id="tbtn-fire" class="tbtn tbtn-fire" type="button">
+          <span class="fire-ring"></span>
+          <span>FIRE</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Pre-Deployment / Pause Overlay -->
     <section id="menu-overlay" class="menu-overlay">
       <div class="menu-panel">
         <div class="menu-topbar osd-mono">
           <span class="rec-line"><span class="rec-dot"></span> LIVE BODYCAM FEED // SECTOR 07</span>
-          <span>OP-ZEROX SHOUTER</span>
+          <div class="menu-topbar-actions">
+            <button id="btn-menu-fullscreen" class="hud-pill-btn" type="button">
+              <svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="fs-label">FULLSCREEN</span>
+            </button>
+            <span>OP-ZEROX SHOUTER</span>
+          </div>
         </div>
 
         <div class="menu-hero">
           <h1>ZEROX // BODYCAM</h1>
-          <p class="menu-subtitle">Tactical Body-Mounted Camera FPS — Warehouse Breach Simulation</p>
+          <p class="menu-subtitle">Tactical Body-Mounted Camera FPS — Desktop &amp; Mobile Touch Ready</p>
         </div>
 
         <div class="menu-grid">
@@ -118,7 +195,7 @@
 
             <div class="control-group">
               <label for="opt-sens" class="control-label osd-mono">
-                <span>MOUSE SENSITIVITY</span>
+                <span>AIM SENSITIVITY</span>
                 <span id="val-sens">1.0x</span>
               </label>
               <input id="opt-sens" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
@@ -148,10 +225,28 @@
                 <span>RENDERING QUALITY</span>
               </label>
               <select id="opt-quality" class="tactical-select osd-mono">
-                <option value="ultra" selected>Ultra (Dynamic Shadows + Bloom + PostFX)</option>
-                <option value="high">High (Balanced Shadows + PostFX)</option>
+                <option value="ultra" selected>Ultra Max (High-DPI + MSAA + Dynamic Shadows + Bloom)</option>
+                <option value="high">High (Crisp Shadows + PostFX)</option>
                 <option value="perf">Performance (Fast Frame Rate)</option>
               </select>
+            </div>
+
+            <div class="control-group">
+              <label for="opt-touch" class="control-label osd-mono">
+                <span>MOBILE TOUCH HUD</span>
+              </label>
+              <select id="opt-touch" class="tactical-select osd-mono">
+                <option value="auto" selected>Auto-Detect (Show on Phone/Tablet)</option>
+                <option value="on">Always Enabled (Touch Dual-Stick)</option>
+                <option value="off">Disabled (Keyboard &amp; Mouse Only)</option>
+              </select>
+            </div>
+
+            <div class="control-group checkbox-row osd-mono">
+              <label class="checkbox-label">
+                <input id="opt-autofull" type="checkbox" checked />
+                <span>Auto Fullscreen + Landscape Lock on Mobile Deploy</span>
+              </label>
             </div>
 
             <div class="control-group checkbox-row osd-mono">
@@ -165,28 +260,34 @@
           <div class="menu-col">
             <h2 class="col-title osd-mono">OPERATOR CONTROLS</h2>
             <div class="keybind-list osd-mono">
-              <div class="kb-row"><kbd>W A S D</kbd><span>Move / Tactical Strafe</span></div>
+              <div class="kb-row"><kbd>W A S D / L-STICK</kbd><span>Move / Push Edge to Sprint</span></div>
               <div class="kb-row"><kbd>SHIFT</kbd><span>Low-Ready Sprint</span></div>
-              <div class="kb-row"><kbd>C / CTRL</kbd><span>Crouch / Stabilize Aim</span></div>
-              <div class="kb-row"><kbd>Q / E</kbd><span>Lean Left / Right Around Cover</span></div>
-              <div class="kb-row"><kbd>LMB</kbd><span>Fire Weapon</span></div>
-              <div class="kb-row"><kbd>RMB / V</kbd><span>Aim Down Holographic Sight (ADS)</span></div>
-              <div class="kb-row"><kbd>X / MMB</kbd><span>Canted PEQ-15 Laser Point-Shoot</span></div>
-              <div class="kb-row"><kbd>R</kbd><span>Tactical / Dry Bolt-Lock Reload</span></div>
-              <div class="kb-row"><kbd>B</kbd><span>Fire Selector (AUTO / SEMI)</span></div>
-              <div class="kb-row"><kbd>F</kbd><span>Toggle Weapon Flashlight</span></div>
-              <div class="kb-row"><kbd>G</kbd><span>Inspect Weapon &amp; Mag Check</span></div>
-              <div class="kb-row"><kbd>1 / 2</kbd><span>MK18 Carbine / G19 Sidearm</span></div>
+              <div class="kb-row"><kbd>C / CTRL / CROUCH</kbd><span>Crouch / Stabilize Aim</span></div>
+              <div class="kb-row"><kbd>Q / E / LEAN</kbd><span>Lean Left / Right Around Cover</span></div>
+              <div class="kb-row"><kbd>LMB / FIRE</kbd><span>Fire (+ Drag Fire Btn to Aim)</span></div>
+              <div class="kb-row"><kbd>RMB / V / ADS</kbd><span>Aim Down Holographic Sight</span></div>
+              <div class="kb-row"><kbd>X / MMB / CANT</kbd><span>Canted PEQ-15 Laser Point-Shoot</span></div>
+              <div class="kb-row"><kbd>R / RLD</kbd><span>Tactical / Dry Bolt-Lock Reload</span></div>
+              <div class="kb-row"><kbd>B / MODE</kbd><span>Fire Selector (AUTO / SEMI)</span></div>
+              <div class="kb-row"><kbd>F / LIGHT</kbd><span>Toggle Weapon Flashlight</span></div>
+              <div class="kb-row"><kbd>G / INSP</kbd><span>Inspect Weapon &amp; Mag Check</span></div>
+              <div class="kb-row"><kbd>1 / 2 / SWAP</kbd><span>MK18 Carbine / G19 Sidearm</span></div>
             </div>
           </div>
         </div>
 
         <div class="menu-actions">
-          <button id="btn-deploy" class="btn-primary osd-mono" type="button">
-            DEPLOY TO SECTOR 07
-          </button>
+          <div class="menu-action-row">
+            <button id="btn-deploy" class="btn-primary osd-mono" type="button">
+              DEPLOY TO SECTOR 07
+            </button>
+            <button id="btn-deploy-full" class="btn-secondary osd-mono" type="button">
+              <svg class="btn-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>FULLSCREEN DEPLOY</span>
+            </button>
+          </div>
           <p id="pointer-hint" class="pointer-hint osd-mono">
-            Click viewport to engage tactical mouse lock. Supports fallback drag-aim if restricted.
+            PC: Click viewport for mouse lock (drag-aim fallback). Mobile: Dual-stick touch + Fullscreen supported.
           </p>
         </div>
       </div>

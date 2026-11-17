@@ -50,10 +50,21 @@ export class BodycamController {
     this.keys = new Set();
     this.isLocked = false;
     this.pointerLockBlocked = false;
+    this.disablePointerLock = false;
     this.draggingLook = false;
     this.lastMouseX = 0;
     this.lastMouseY = 0;
     this.enabled = false;
+
+    // Mobile Touch State
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
+    this.touchSprint = false;
+    this.touchCrouchToggle = false;
+    this.touchLeanToggle = 0;
+    this.touchJumpQueued = false;
+    this.touchLookDX = 0;
+    this.touchLookDY = 0;
 
     this.forwardVec = new THREE.Vector3();
     this.rightVec = new THREE.Vector3();
@@ -66,6 +77,12 @@ export class BodycamController {
     window.addEventListener('keydown', (e) => {
       if (!this.enabled) return;
       this.keys.add(e.code);
+      if (e.code === 'KeyC' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        this.touchCrouchToggle = false;
+      }
+      if (e.code === 'KeyQ' || e.code === 'KeyE') {
+        this.touchLeanToggle = 0;
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -86,6 +103,7 @@ export class BodycamController {
 
     window.addEventListener('mousemove', (e) => {
       if (!this.enabled) return;
+      if (e.sourceCapabilities?.firesTouchEvents) return;
       this.hasMousePos = true;
       this.cursorNormX = e.clientX / Math.max(1, window.innerWidth);
       if (this.isLocked) {
@@ -109,6 +127,7 @@ export class BodycamController {
 
     this.domElement.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
+      if (e.sourceCapabilities?.firesTouchEvents) return;
       if (!this.isLocked) {
         this.draggingLook = true;
         this.lastMouseX = e.clientX;
@@ -124,7 +143,7 @@ export class BodycamController {
   }
 
   requestLock() {
-    if (this.pointerLockBlocked) return;
+    if (this.pointerLockBlocked || this.disablePointerLock) return;
     try {
       const res = this.domElement.requestPointerLock?.();
       if (res && typeof res.catch === 'function') {
@@ -135,6 +154,31 @@ export class BodycamController {
     } catch {
       this.pointerLockBlocked = true;
     }
+  }
+
+  setTouchMove(x, y, autoSprint = false) {
+    this.touchMoveX = THREE.MathUtils.clamp(x, -1, 1);
+    this.touchMoveY = THREE.MathUtils.clamp(y, -1, 1);
+    this.touchSprint = Boolean(autoSprint);
+    this.hasMousePos = false;
+  }
+
+  addTouchLook(dx, dy) {
+    this.touchLookDX += dx;
+    this.touchLookDY += dy;
+    this.hasMousePos = false;
+  }
+
+  toggleCrouch() {
+    this.touchCrouchToggle = !this.touchCrouchToggle;
+  }
+
+  toggleLean(dir) {
+    this.touchLeanToggle = this.touchLeanToggle === dir ? 0 : dir;
+  }
+
+  triggerJump() {
+    this.touchJumpQueued = true;
   }
 
   reset() {
@@ -152,6 +196,14 @@ export class BodycamController {
     this.damageShake = 0;
     this.trauma = 0;
     this.keys.clear();
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
+    this.touchSprint = false;
+    this.touchCrouchToggle = false;
+    this.touchLeanToggle = 0;
+    this.touchJumpQueued = false;
+    this.touchLookDX = 0;
+    this.touchLookDY = 0;
   }
 
   setProfile(profile) {
@@ -179,14 +231,18 @@ export class BodycamController {
   }
 
   update(dt, timeSec, isAds = false) {
-    // Process accumulated mouse look
+    // Process accumulated mouse + touch look
     const sensScale = 0.0021 * this.sensitivity * (isAds ? 0.56 : 1.0);
-    const dYaw = -this.rawDeltaX * sensScale;
-    const dPitch = -this.rawDeltaY * sensScale;
-    this.lookDeltaX = this.rawDeltaX * sensScale;
-    this.lookDeltaY = this.rawDeltaY * sensScale;
+    const totalDX = this.rawDeltaX + this.touchLookDX * 1.55;
+    const totalDY = this.rawDeltaY + this.touchLookDY * 1.55;
+    const dYaw = -totalDX * sensScale;
+    const dPitch = -totalDY * sensScale;
+    this.lookDeltaX = totalDX * sensScale;
+    this.lookDeltaY = totalDY * sensScale;
     this.rawDeltaX = 0;
     this.rawDeltaY = 0;
+    this.touchLookDX = 0;
+    this.touchLookDY = 0;
 
     if (this.enabled) {
       let keyYaw = ((this.keys.has('ArrowLeft') ? 1 : 0) - (this.keys.has('ArrowRight') ? 1 : 0)) * 2.0 * dt;
@@ -200,7 +256,8 @@ export class BodycamController {
     }
 
     // Crouch / Sprint / Lean state
-    const wantCrouch = this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight');
+    const keyCrouch = this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight');
+    const wantCrouch = keyCrouch || this.touchCrouchToggle;
     if (wantCrouch) {
       this.crouching = true;
     } else if (this.crouching) {
@@ -209,19 +266,22 @@ export class BodycamController {
       }
     }
 
-    const moveFwd = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
-    const moveRight = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
-    const moving = moveFwd !== 0 || moveRight !== 0;
+    const keyFwd = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+    const keyRight = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
+    const moveFwd = THREE.MathUtils.clamp(keyFwd + this.touchMoveY, -1, 1);
+    const moveRight = THREE.MathUtils.clamp(keyRight + this.touchMoveX, -1, 1);
+    const moveMag = Math.min(1, Math.hypot(moveFwd, moveRight));
+    const moving = moveMag > 0.05;
 
     this.sprinting =
       !this.crouching &&
       !isAds &&
-      moveFwd > 0 &&
-      (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) &&
-      this.grounded;
+      this.grounded &&
+      ((moveFwd > 0 && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'))) ||
+        (this.touchSprint && this.touchMoveY > 0.72));
 
-    const leanInput = (this.keys.has('KeyE') ? 1 : 0) - (this.keys.has('KeyQ') ? 1 : 0);
-    this.leanTarget = leanInput;
+    const keyLean = (this.keys.has('KeyE') ? 1 : 0) - (this.keys.has('KeyQ') ? 1 : 0);
+    this.leanTarget = keyLean !== 0 ? keyLean : this.touchLeanToggle;
     this.leanCurrent = THREE.MathUtils.lerp(this.leanCurrent, this.leanTarget, Math.min(1, dt * 11));
 
     // Smooth eye height interpolation
@@ -242,17 +302,19 @@ export class BodycamController {
     if (this.crouching) speed = 2.55;
     else if (this.sprinting) speed = 6.75;
     else if (isAds) speed = 2.85;
+    speed *= moving ? Math.max(0.28, moveMag) : 1.0;
 
     const accel = this.grounded ? 14.0 : 4.0;
     this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, wishDir.x * speed, Math.min(1, dt * accel));
     this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, wishDir.z * speed, Math.min(1, dt * accel));
 
     // Jump
-    if (this.enabled && this.grounded && this.keys.has('Space')) {
+    if (this.enabled && this.grounded && (this.keys.has('Space') || this.touchJumpQueued)) {
       this.velocity.y = 5.4;
       this.grounded = false;
       this.footImpactVel -= 0.16;
     }
+    this.touchJumpQueued = false;
 
     // Gravity
     this.velocity.y -= 17.5 * dt;

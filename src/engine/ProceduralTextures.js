@@ -89,7 +89,7 @@ function configureTexture(tex, repeatX = 1, repeatY = 1, isColor = true) {
   if (isColor) {
     tex.colorSpace = THREE.SRGBColorSpace;
   }
-  tex.anisotropy = 8;
+  tex.anisotropy = 16;
   tex.needsUpdate = true;
   return tex;
 }
