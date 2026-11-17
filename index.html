@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZEROX // BODYCAM — Tactical First-Person Shooter</title>
+  <meta name="description" content="WebGL photorealistic bodycam tactical first-person shooter with procedural WebAudio acoustics, multi-stage weapon reloads, dynamic lighting, and tactical AI breaching." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <main id="app" class="viewport">
+    <canvas id="game-canvas" aria-label="Bodycam Tactical FPS Viewport"></canvas>
+
+    <!-- Subtle optical bodycam frame & damage feedback -->
+    <div id="lens-overlay" class="lens-overlay" aria-hidden="true">
+      <div class="lens-vignette"></div>
+      <div id="damage-flash" class="damage-flash"></div>
+      <div id="hit-marker" class="hit-marker">
+        <span class="hm-arm hm-tl"></span>
+        <span class="hm-arm hm-tr"></span>
+        <span class="hm-arm hm-bl"></span>
+        <span class="hm-arm hm-br"></span>
+      </div>
+      <div id="hip-dot" class="hip-dot"></div>
+    </div>
+
+    <!-- Bodycam OSD HUD -->
+    <header id="hud-osd" class="hud-osd hidden">
+      <div class="osd-top-row">
+        <div class="osd-block osd-cam-meta">
+          <div class="rec-line">
+            <span class="rec-dot"></span>
+            <span class="rec-label">REC</span>
+            <span id="osd-timestamp" class="osd-mono">2026-11-17 11:45:00 -0800</span>
+          </div>
+          <div class="osd-subline osd-mono">
+            <span>AXON BODY 4 // UNIT-ZEROX-07</span>
+            <span class="sep">|</span>
+            <span id="osd-fps">60 FPS</span>
+            <span class="sep">|</span>
+            <span id="osd-mode-badge">LOCKED</span>
+          </div>
+        </div>
+
+        <div class="osd-block osd-mission">
+          <div class="mission-row osd-mono">
+            <span class="tag-dim">SECTOR 07 // WAREHOUSE</span>
+            <span class="sep">|</span>
+            <span>WAVE <strong id="hud-wave">01</strong></span>
+            <span class="sep">|</span>
+            <span>HOSTILES <strong id="hud-enemies" class="accent-amber">00</strong></span>
+            <span class="sep">|</span>
+            <span>ELIMS <strong id="hud-kills">00</strong></span>
+          </div>
+          <div id="comms-feed" class="comms-feed osd-mono"></div>
+        </div>
+      </div>
+
+      <div id="reload-prompt" class="reload-prompt osd-mono hidden">LOW / EMPTY MAG — PRESS [R]</div>
+
+      <div class="osd-bottom-row">
+        <div class="osd-block osd-vitals">
+          <div class="vitals-header osd-mono">
+            <span>VITALS</span>
+            <span id="hud-bpm" class="bpm-readout">74 BPM</span>
+            <span id="hud-stance" class="stance-pill">STAND</span>
+          </div>
+          <div class="hp-track">
+            <div id="hud-hp-fill" class="hp-fill" style="width: 100%"></div>
+          </div>
+          <div class="vitals-sub osd-mono">
+            <span>ARMOR PLATE <strong id="hud-armor">100%</strong></span>
+            <span class="sep">|</span>
+            <span>HEALTH <strong id="hud-hp">100%</strong></span>
+          </div>
+        </div>
+
+        <div class="osd-block osd-weapon">
+          <div class="weapon-header osd-mono">
+            <span id="hud-weapon-name">MK18 MOD 1 // 5.56</span>
+            <span id="hud-firemode" class="mode-pill">AUTO</span>
+          </div>
+          <div class="ammo-readout osd-mono">
+            <span id="hud-ammo-mag" class="ammo-big">30</span>
+            <span id="hud-chamber-plus" class="ammo-plus">+1</span>
+            <span class="ammo-slash">/</span>
+            <span id="hud-ammo-reserve" class="ammo-res">150</span>
+          </div>
+          <div id="hud-mag-bars" class="mag-bars" aria-hidden="true"></div>
+          <div class="weapon-toggles osd-mono">
+            <span id="hud-light-ind" class="toggle-ind active">[F] LIGHT ON</span>
+            <span id="hud-laser-ind" class="toggle-ind active">[X] PEQ-15</span>
+            <span class="toggle-ind">[G] INSPECT</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Pre-Deployment / Pause Overlay -->
+    <section id="menu-overlay" class="menu-overlay">
+      <div class="menu-panel">
+        <div class="menu-topbar osd-mono">
+          <span class="rec-line"><span class="rec-dot"></span> LIVE BODYCAM FEED // SECTOR 07</span>
+          <span>OP-ZEROX SHOUTER</span>
+        </div>
+
+        <div class="menu-hero">
+          <h1>ZEROX // BODYCAM</h1>
+          <p class="menu-subtitle">Tactical Body-Mounted Camera FPS — Warehouse Breach Simulation</p>
+        </div>
+
+        <div class="menu-grid">
+          <div class="menu-col">
+            <h2 class="col-title osd-mono">OPTICS &amp; CALIBRATION</h2>
+
+            <div class="control-group">
+              <label for="opt-sens" class="control-label osd-mono">
+                <span>MOUSE SENSITIVITY</span>
+                <span id="val-sens">1.0x</span>
+              </label>
+              <input id="opt-sens" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
+            </div>
+
+            <div class="control-group">
+              <label for="opt-vol" class="control-label osd-mono">
+                <span>ACOUSTIC GAIN</span>
+                <span id="val-vol">85%</span>
+              </label>
+              <input id="opt-vol" type="range" min="0" max="100" step="5" value="85" />
+            </div>
+
+            <div class="control-group">
+              <label for="opt-bodycam" class="control-label osd-mono">
+                <span>BODYCAM LENS &amp; SWAY</span>
+              </label>
+              <select id="opt-bodycam" class="tactical-select osd-mono">
+                <option value="realistic" selected>Realistic Bodycam (Balanced Fisheye + Sway)</option>
+                <option value="extreme">Extreme GoPro/Axon (Wide Fisheye + Heavy Inertia)</option>
+                <option value="tactical">Stabilized Helmet Cam (Light Distortion)</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label for="opt-quality" class="control-label osd-mono">
+                <span>RENDERING QUALITY</span>
+              </label>
+              <select id="opt-quality" class="tactical-select osd-mono">
+                <option value="ultra" selected>Ultra (Dynamic Shadows + Bloom + PostFX)</option>
+                <option value="high">High (Balanced Shadows + PostFX)</option>
+                <option value="perf">Performance (Fast Frame Rate)</option>
+              </select>
+            </div>
+
+            <div class="control-group checkbox-row osd-mono">
+              <label class="checkbox-label">
+                <input id="opt-reticle" type="checkbox" checked />
+                <span>Subtle Reference Pip (Uncheck for Pure Laser/Optic)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="menu-col">
+            <h2 class="col-title osd-mono">OPERATOR CONTROLS</h2>
+            <div class="keybind-list osd-mono">
+              <div class="kb-row"><kbd>W A S D</kbd><span>Move / Tactical Strafe</span></div>
+              <div class="kb-row"><kbd>SHIFT</kbd><span>Low-Ready Sprint</span></div>
+              <div class="kb-row"><kbd>C / CTRL</kbd><span>Crouch / Stabilize Aim</span></div>
+              <div class="kb-row"><kbd>Q / E</kbd><span>Lean Left / Right Around Cover</span></div>
+              <div class="kb-row"><kbd>LMB</kbd><span>Fire Weapon</span></div>
+              <div class="kb-row"><kbd>RMB / V</kbd><span>Aim Down Holographic Sight (ADS)</span></div>
+              <div class="kb-row"><kbd>X / MMB</kbd><span>Canted PEQ-15 Laser Point-Shoot</span></div>
+              <div class="kb-row"><kbd>R</kbd><span>Tactical / Dry Bolt-Lock Reload</span></div>
+              <div class="kb-row"><kbd>B</kbd><span>Fire Selector (AUTO / SEMI)</span></div>
+              <div class="kb-row"><kbd>F</kbd><span>Toggle Weapon Flashlight</span></div>
+              <div class="kb-row"><kbd>G</kbd><span>Inspect Weapon &amp; Mag Check</span></div>
+              <div class="kb-row"><kbd>1 / 2</kbd><span>MK18 Carbine / G19 Sidearm</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-actions">
+          <button id="btn-deploy" class="btn-primary osd-mono" type="button">
+            DEPLOY TO SECTOR 07
+          </button>
+          <p id="pointer-hint" class="pointer-hint osd-mono">
+            Click viewport to engage tactical mouse lock. Supports fallback drag-aim if restricted.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- After-Action Report (Game Over) -->
+    <section id="aar-overlay" class="menu-overlay hidden">
+      <div class="menu-panel aar-panel">
+        <div class="menu-topbar osd-mono">
+          <span class="rec-line"><span class="rec-dot dead"></span> SIGNAL LOST // OPERATOR DOWN</span>
+          <span>AXON BODY 4 ARCHIVE</span>
+        </div>
+        <div class="menu-hero">
+          <h2>AFTER-ACTION REPORT</h2>
+          <p id="aar-summary" class="menu-subtitle">Bodycam telemetry uploaded from Sector 07.</p>
+        </div>
+        <div class="aar-stats osd-mono">
+          <div class="stat-box"><span>WAVES CLEARED</span><strong id="aar-wave">0</strong></div>
+          <div class="stat-box"><span>HOSTILES ELIMINATED</span><strong id="aar-kills">0</strong></div>
+          <div class="stat-box"><span>HEADSHOTS</span><strong id="aar-headshots">0</strong></div>
+          <div class="stat-box"><span>ACCURACY</span><strong id="aar-accuracy">0%</strong></div>
+        </div>
+        <div class="menu-actions">
+          <button id="btn-redeploy" class="btn-primary osd-mono" type="button">
+            REDEPLOY OPERATOR
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
